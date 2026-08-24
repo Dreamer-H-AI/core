@@ -810,8 +810,8 @@
     }
 
     function rerunIfReady() {
+      renderExcludedList();
       if (state.targetLevel) findCombos();
-      else renderExcludedList();
     }
 
     function renderResults() {
