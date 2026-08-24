@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>코어 합성 계산기</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --text: #1f2933;
+      --muted: #64748b;
+      --line: #d8dee8;
+      --red: #dc3f45;
+      --blue: #2878d8;
+      --green: #2f9d62;
+      --accent: #334155;
+      --warn: #b7791f;
+      --danger: #b42318;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      width: min(1320px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 36px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-size: 13px;
+      color: #334155;
+      font-weight: 650;
+    }
+
+    input, select, textarea, button {
+      font: inherit;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 9px 10px;
+      outline: none;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: #64748b;
+      box-shadow: 0 0 0 3px rgba(100, 116, 139, .14);
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    button {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: white;
+      border-radius: 6px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button.secondary {
+      background: #fff;
+      color: var(--accent);
+    }
+
+    button.danger {
+      background: #fff;
+      color: var(--danger);
+      border-color: #f2b8b5;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .mode {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .mode button {
+      background: #fff;
+      color: var(--accent);
+      border-color: var(--line);
+    }
+
+    .mode button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .checks {
+      display: grid;
+      gap: 7px;
+      margin-top: 10px;
+    }
+
+    .excluded {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+      min-height: 28px;
+    }
+
+    .excluded button {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+      color: #334155;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #334155;
+      font-size: 13px;
+    }
+
+    .check input {
+      width: auto;
+    }
+
+    .status {
+      margin-top: 10px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .status.warn {
+      background: #fff7e6;
+      color: var(--warn);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px 12px;
+      background: #fff;
+    }
+
+    .stat b {
+      display: block;
+      font-size: 20px;
+      line-height: 1.25;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .toolbar .row {
+      width: min(420px, 100%);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: #fff;
+    }
+
+    th, td {
+      border-bottom: 1px solid #e6ebf2;
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      z-index: 1;
+      color: #334155;
+      font-size: 12px;
+    }
+
+    .table-wrap {
+      max-height: calc(100vh - 285px);
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .core {
+      display: grid;
+      gap: 3px;
+      min-width: 180px;
+    }
+
+    .material-button {
+      display: block;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      font-weight: inherit;
+    }
+
+    .material-button:hover strong {
+      text-decoration: underline;
+    }
+
+    .core strong {
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 42px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .pill.red { background: var(--red); }
+    .pill.blue { background: var(--blue); }
+    .pill.green { background: var(--green); }
+
+    .empty {
+      padding: 38px 16px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 960px) {
+      main { width: min(100vw - 20px, 760px); padding-top: 16px; }
+      header { display: block; }
+      .grid { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .table-wrap { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>코어 합성 계산기</h1>
+        <p class="sub">5층 코어 DB를 읽어서 목표 레벨 또는 목표 코어 기준의 3개 재료 조합을 찾습니다.</p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>DB 불러오기</h2>
+        <div class="actions">
+          <button id="loadScript">DB 새로고침</button>
+        </div>
+        <div id="loadStatus" class="status">아직 DB를 불러오지 않았습니다.</div>
+
+        <h2 style="margin-top: 18px;">계산 방식</h2>
+        <div class="mode">
+          <button id="modeLevel" class="active" type="button">레벨만 입력</button>
+          <button id="modeCore" type="button">원하는 코어 선택</button>
+        </div>
+
+        <div id="levelControls">
+          <label for="targetLevel">원하는 코어 레벨</label>
+          <input id="targetLevel" type="number" min="1" step="1" placeholder="예: 116" />
+        </div>
+
+        <div id="coreControls" class="hidden">
+          <label for="coreSearch">코어 검색</label>
+          <input id="coreSearch" placeholder="몬스터명, 효과, 무기 검색" />
+          <label for="targetCore">원하는 코어</label>
+          <select id="targetCore"></select>
+        </div>
+
+        <h2 style="margin-top: 18px;">필터</h2>
+        <div class="checks">
+          <label class="check"><input id="excludeTarget" type="checkbox" checked /> 선택한 목표 코어는 재료에서 제외</label>
+          <label class="check hidden"><input id="allowSameMonster" type="checkbox" checked /> 같은 몬스터의 다른 색상 코어도 재료로 허용</label>
+          <label class="check"><input id="showOnlyComplete" type="checkbox" checked /> 효과 정보가 채워진 코어만 사용</label>
+        </div>
+        <div class="row">
+          <div>
+            <label for="minLevel">재료 최소 레벨</label>
+            <input id="minLevel" type="number" min="1" step="1" />
+          </div>
+          <div>
+            <label for="maxLevel">재료 최대 레벨</label>
+            <input id="maxLevel" type="number" min="1" step="1" />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="calculate">조합 찾기</button>
+          <button class="secondary" id="resetFilters">필터 초기화</button>
+        </div>
+        <h2 style="margin-top: 18px;">제외 재료</h2>
+        <div id="excludedList" class="excluded"></div>
+        <div class="actions">
+          <button class="danger" id="clearExcluded">제외 목록 비우기</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="stats">
+          <div class="stat"><b id="coreCount">0</b><span>불러온 코어</span></div>
+          <div class="stat"><b id="comboCount">0</b><span>가능 조합</span></div>
+          <div class="stat"><b id="resultLevel">-</b><span>결과 레벨</span></div>
+          <div class="stat"><b id="chance">-</b><span>목표 코어 확률</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="toolbar">
+            <h2 style="margin:0;">조합 결과</h2>
+            <div class="row">
+              <select id="sortBy">
+                <option value="balanced">목표 레벨에 가까운 재료 우선</option>
+                <option value="low">낮은 레벨 재료 우선</option>
+                <option value="high">높은 레벨 재료 우선</option>
+              </select>
+              <input id="resultSearch" placeholder="결과 내 검색" />
+            </div>
+          </div>
+          <div id="empty" class="empty">DB를 불러온 뒤 원하는 레벨이나 코어를 선택하세요.</div>
+          <div id="results" class="table-wrap hidden">
+            <table>
+              <thead>
+                <tr>
+                  <th>재료 몬스터 1</th>
+                  <th>재료 몬스터 2</th>
+                  <th>재료 몬스터 3</th>
+                  <th>평균 레벨</th>
+                </tr>
+              </thead>
+              <tbody id="resultBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const state = {
+      mode: "level",
+      cores: [],
+      combos: [],
+      excludedMonsters: new Set(),
+      targetLevel: null,
+      targetCore: null,
+    };
+
+    const els = {
+      loadScript: document.getElementById("loadScript"),
+      loadStatus: document.getElementById("loadStatus"),
+      modeLevel: document.getElementById("modeLevel"),
+      modeCore: document.getElementById("modeCore"),
+      levelControls: document.getElementById("levelControls"),
+      coreControls: document.getElementById("coreControls"),
+      targetLevel: document.getElementById("targetLevel"),
+      coreSearch: document.getElementById("coreSearch"),
+      targetCore: document.getElementById("targetCore"),
+      excludeTarget: document.getElementById("excludeTarget"),
+      allowSameMonster: document.getElementById("allowSameMonster"),
+      showOnlyComplete: document.getElementById("showOnlyComplete"),
+      minLevel: document.getElementById("minLevel"),
+      maxLevel: document.getElementById("maxLevel"),
+      calculate: document.getElementById("calculate"),
+      resetFilters: document.getElementById("resetFilters"),
+      excludedList: document.getElementById("excludedList"),
+      clearExcluded: document.getElementById("clearExcluded"),
+      sortBy: document.getElementById("sortBy"),
+      resultSearch: document.getElementById("resultSearch"),
+      coreCount: document.getElementById("coreCount"),
+      comboCount: document.getElementById("comboCount"),
+      resultLevel: document.getElementById("resultLevel"),
+      chance: document.getElementById("chance"),
+      empty: document.getElementById("empty"),
+      results: document.getElementById("results"),
+      resultBody: document.getElementById("resultBody"),
+    };
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let quote = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (quote) {
+          if (ch === '"' && next === '"') {
+            cell += '"';
+            i++;
+          } else if (ch === '"') {
+            quote = false;
+          } else {
+            cell += ch;
+          }
+        } else if (ch === '"') {
+          quote = true;
+        } else if (ch === ",") {
+          row.push(cell);
+          cell = "";
+        } else if (ch === "\n") {
+          row.push(cell);
+          rows.push(row);
+          row = [];
+          cell = "";
+        } else if (ch !== "\r") {
+          cell += ch;
+        }
+      }
+      row.push(cell);
+      if (row.some(value => value.trim() !== "")) rows.push(row);
+      return rows;
+    }
+
+    function normalizeHeader(value) {
+      return String(value || "").trim().replace(/\s+/g, " ");
+    }
+
+    function rowValue(row, headers, names) {
+      for (const name of names) {
+        const index = headers.indexOf(name);
+        if (index >= 0) return String(row[index] || "").trim();
+      }
+      return "";
+    }
+
+    function buildCoresFromDbInput(rows) {
+      const headers = rows[0].map(normalizeHeader);
+      const cores = [];
+
+      rows.slice(1).forEach((row, index) => {
+        const rowNo = rowValue(row, headers, ["번호"]) || String(index + 1);
+        const floor = rowValue(row, headers, ["층"]) || "5층";
+        const level = Number(rowValue(row, headers, ["코어 레벨"]));
+        const monster = rowValue(row, headers, ["몬스터명"]);
+        const note = rowValue(row, headers, ["비고"]);
+        if (!monster || !Number.isFinite(level)) return;
+
+        [
+          ["red", "빨강", ["빨강 구분"], ["빨강 효과"], ["빨강 무기", "코어 무기"]],
+          ["blue", "파랑", ["파랑 구분"], ["파랑 효과"], ["파랑 무기"]],
+          ["green", "초록", ["초록 구분"], ["초록 효과"], ["초록 무기"]],
+        ].forEach(([code, color, typeNames, effectNames, weaponNames]) => {
+          const effectType = rowValue(row, headers, typeNames);
+          const effect = rowValue(row, headers, effectNames);
+          const weapon = rowValue(row, headers, weaponNames);
+          cores.push({
+            id: `${floor}-${String(rowNo).padStart(3, "0")}-${code}`,
+            floor,
+            level,
+            monster,
+            color,
+            colorCode: code,
+            effectType,
+            effect,
+            weapon,
+            note,
+          });
+        });
+      });
+
+      return cores;
+    }
+
+    function buildCoresFromObjects(objects) {
+      const headers = [
+        "번호", "층", "코어 레벨", "몬스터명",
+        "빨강 구분", "빨강 효과", "빨강 무기",
+        "파랑 구분", "파랑 효과", "파랑 무기",
+        "초록 구분", "초록 효과", "초록 무기",
+        "비고", "상태"
+      ];
+      const rows = [
+        headers,
+        ...objects.map(item => headers.map(header => item[header] || ""))
+      ];
+      return buildCoresFromDbInput(rows);
+    }
+
+    function extractSheetId(url) {
+      const match = String(url).match(/\/spreadsheets\/d\/([^/]+)/);
+      return match ? match[1] : String(url).trim();
+    }
+
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyyDkwxQOhDAYBD4vhxJfpWvrS9Bi3sZNWiiIfXpCdu4wMC28zV6t8YfiG6u-hSrerXg/exec";
+
+    function setStatus(message, warn = false) {
+      els.loadStatus.textContent = message;
+      els.loadStatus.classList.toggle("warn", warn);
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      els.modeLevel.classList.toggle("active", mode === "level");
+      els.modeCore.classList.toggle("active", mode === "core");
+      els.levelControls.classList.toggle("hidden", mode !== "level");
+      els.coreControls.classList.toggle("hidden", mode !== "core");
+    }
+
+    function coreLabel(core) {
+      const weapon = core.weapon ? ` / ${core.weapon}` : "";
+      return `${core.monster} · ${core.color} · Lv${core.level} · ${core.effectType || "구분 없음"} · ${core.effect || "효과 없음"}${weapon}`;
+    }
+
+    function renderCoreOptions() {
+      const query = els.coreSearch.value.trim().toLowerCase();
+      const filtered = state.cores.filter(core => {
+        const text = [core.monster, core.color, core.level, core.effectType, core.effect, core.weapon].join(" ").toLowerCase();
+        return !query || text.includes(query);
+      });
+
+      els.targetCore.innerHTML = "";
+      filtered.forEach(core => {
+        const option = document.createElement("option");
+        option.value = core.id;
+        option.textContent = coreLabel(core);
+        els.targetCore.appendChild(option);
+      });
+    }
+
+    function applyDb(cores, sourceName) {
+      state.cores = cores;
+      els.coreCount.textContent = cores.length.toLocaleString();
+      setStatus(`${sourceName}에서 코어 ${cores.length.toLocaleString()}개를 불러왔습니다.`);
+      renderCoreOptions();
+      clearResults("원하는 레벨이나 코어를 선택하고 조합을 찾으세요.");
+    }
+
+    function clearResults(message) {
+      state.combos = [];
+      els.comboCount.textContent = "0";
+      els.resultLevel.textContent = "-";
+      els.chance.textContent = "-";
+      els.resultBody.innerHTML = "";
+      els.empty.textContent = message;
+      els.empty.classList.remove("hidden");
+      els.results.classList.add("hidden");
+    }
+
+    async function loadFromScript() {
+      const url = SCRIPT_URL;
+      setStatus("연동 URL에서 DB를 불러오는 중입니다.");
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (!data.ok || !Array.isArray(data.rows)) throw new Error("응답 형식이 올바르지 않습니다.");
+        const cores = buildCoresFromObjects(data.rows);
+        if (!cores.length) throw new Error("코어 데이터가 비어 있습니다.");
+        applyDb(cores, "연동 URL");
+      } catch (error) {
+        setStatus("연동 URL에서 DB를 불러오지 못했습니다. Apps Script 배포 권한과 URL을 확인하세요.", true);
+      }
+    }
+
+    function availableCores(targetCore) {
+      const min = els.minLevel.value.trim() === "" ? null : Number(els.minLevel.value);
+      const max = els.maxLevel.value.trim() === "" ? null : Number(els.maxLevel.value);
+      return state.cores.filter(core => {
+        if (els.showOnlyComplete.checked && (!core.effectType || !core.effect)) return false;
+        if (min !== null && Number.isFinite(min) && core.level < min) return false;
+        if (max !== null && Number.isFinite(max) && core.level > max) return false;
+        if (targetCore && els.excludeTarget.checked && core.id === targetCore.id) return false;
+        if (state.excludedMonsters.has(`${core.floor}::${core.monster}`)) return false;
+        return true;
+      });
+    }
+
+    function availableMonsters(targetCore) {
+      const seen = new Map();
+      availableCores(targetCore).forEach(core => {
+        const key = `${core.floor}::${core.monster}`;
+        if (!seen.has(key)) {
+          seen.set(key, {
+            id: key,
+            floor: core.floor,
+            monster: core.monster,
+            level: core.level,
+            cores: [],
+          });
+        }
+        seen.get(key).cores.push(core);
+      });
+      return Array.from(seen.values());
+    }
+
+    function findCombos() {
+      if (!state.cores.length) {
+        clearResults("먼저 DB를 불러오세요.");
+        return;
+      }
+
+      let targetCore = null;
+      let targetLevel = Number(els.targetLevel.value);
+      if (state.mode === "core") {
+        targetCore = state.cores.find(core => core.id === els.targetCore.value) || null;
+        if (!targetCore) {
+          clearResults("원하는 코어를 선택하세요.");
+          return;
+        }
+        targetLevel = targetCore.level;
+      }
+
+      if (!Number.isFinite(targetLevel) || targetLevel <= 0) {
+        clearResults("원하는 레벨을 입력하세요.");
+        return;
+      }
+
+      const pool = availableMonsters(targetCore);
+      const combos = [];
+
+      for (let i = 0; i < pool.length - 2; i++) {
+        for (let j = i + 1; j < pool.length - 1; j++) {
+          for (let k = j + 1; k < pool.length; k++) {
+            const avg = (pool[i].level + pool[j].level + pool[k].level) / 3;
+            if (Math.round(avg) === targetLevel) combos.push([pool[i], pool[j], pool[k]]);
+          }
+        }
+      }
+
+      state.targetLevel = targetLevel;
+      state.targetCore = targetCore;
+      state.combos = sortCombos(combos, targetLevel);
+      renderSummary();
+      renderResults();
+    }
+
+    function sortCombos(combos, targetLevel) {
+      const score = combo => combo.reduce((total, core) => total + Math.abs(core.level - targetLevel), 0);
+      return combos.slice().sort((a, b) => {
+        if (els.sortBy.value === "low") return sumLevels(a) - sumLevels(b) || score(a) - score(b);
+        if (els.sortBy.value === "high") return sumLevels(b) - sumLevels(a) || score(a) - score(b);
+        return score(a) - score(b);
+      });
+    }
+
+    function sumLevels(combo) {
+      return combo.reduce((total, core) => total + core.level, 0);
+    }
+
+    function renderSummary() {
+      els.comboCount.textContent = state.combos.length.toLocaleString();
+      els.resultLevel.textContent = state.targetLevel ? `Lv${state.targetLevel}` : "-";
+      if (state.targetCore) {
+        const colorPool = state.cores.filter(core => core.level === state.targetLevel && core.color === state.targetCore.color);
+        if (colorPool.length) {
+          const singleRoll = 1 / (3 * colorPool.length);
+          const threeChoices = 1 - Math.pow(1 - singleRoll, 3);
+          els.chance.textContent = `${(threeChoices * 100).toFixed(2)}%`;
+          els.chance.title = `3개 보기 기준. ${state.targetCore.color} Lv${state.targetLevel} 후보 ${colorPool.length}개, 1칸당 ${(singleRoll * 100).toFixed(2)}%`;
+        } else {
+          els.chance.textContent = "-";
+          els.chance.title = "";
+        }
+      } else {
+        els.chance.textContent = "-";
+        els.chance.title = "";
+      }
+    }
+
+    function renderMaterial(material) {
+      return `
+        <button class="material-button" type="button" data-material-id="${escapeHtml(material.id)}" title="이 몬스터 코어를 조합 결과에서 제외">
+          <div class="core">
+            <strong>${escapeHtml(material.monster)} 코어</strong>
+            <span class="meta">${escapeHtml(material.floor)} · Lv${material.level}</span>
+          </div>
+        </button>
+      `;
+    }
+
+    function renderExcludedList() {
+      els.excludedList.innerHTML = "";
+      if (!state.excludedMonsters.size) {
+        els.excludedList.innerHTML = `<span class="meta">조합 결과의 재료를 클릭하면 제외됩니다.</span>`;
+        return;
+      }
+
+      Array.from(state.excludedMonsters).sort().forEach(id => {
+        const monster = id.split("::")[1] || id;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.excludedId = id;
+        button.textContent = `${monster} ×`;
+        els.excludedList.appendChild(button);
+      });
+    }
+
+    function rerunIfReady() {
+      if (state.targetLevel) findCombos();
+      else renderExcludedList();
+    }
+
+    function renderResults() {
+      const query = els.resultSearch.value.trim().toLowerCase();
+      const filtered = state.combos.filter(combo => {
+        if (!query) return true;
+        return combo.some(material => `${material.monster} ${material.floor} ${material.level}`.toLowerCase().includes(query));
+      });
+
+      els.resultBody.innerHTML = "";
+      if (!filtered.length) {
+        els.empty.textContent = state.combos.length ? "검색 조건에 맞는 조합이 없습니다." : "가능한 조합이 없습니다.";
+        els.empty.classList.remove("hidden");
+        els.results.classList.add("hidden");
+        return;
+      }
+
+      const rows = filtered.slice(0, 1000).map(combo => {
+        const avg = sumLevels(combo) / 3;
+        return `
+          <tr>
+            <td>${renderMaterial(combo[0])}</td>
+            <td>${renderMaterial(combo[1])}</td>
+            <td>${renderMaterial(combo[2])}</td>
+            <td>Lv${avg.toFixed(2)} → Lv${Math.round(avg)}</td>
+          </tr>
+        `;
+      }).join("");
+
+      els.resultBody.innerHTML = rows;
+      els.empty.classList.add("hidden");
+      els.results.classList.remove("hidden");
+
+      if (filtered.length > 1000) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="4" class="meta">결과가 많아 앞의 1,000개만 표시했습니다. 검색이나 필터를 사용하세요.</td>`;
+        els.resultBody.appendChild(tr);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      }[ch]));
+    }
+
+    els.loadScript.addEventListener("click", loadFromScript);
+    els.modeLevel.addEventListener("click", () => setMode("level"));
+    els.modeCore.addEventListener("click", () => setMode("core"));
+    els.coreSearch.addEventListener("input", renderCoreOptions);
+    els.calculate.addEventListener("click", findCombos);
+    els.sortBy.addEventListener("change", () => {
+      state.combos = sortCombos(state.combos, state.targetLevel || 0);
+      renderResults();
+    });
+    els.resultSearch.addEventListener("input", renderResults);
+    els.resultBody.addEventListener("click", event => {
+      const button = event.target.closest("[data-material-id]");
+      if (!button) return;
+      state.excludedMonsters.add(button.dataset.materialId);
+      renderExcludedList();
+      findCombos();
+    });
+    els.excludedList.addEventListener("click", event => {
+      const button = event.target.closest("[data-excluded-id]");
+      if (!button) return;
+      state.excludedMonsters.delete(button.dataset.excludedId);
+      rerunIfReady();
+    });
+    els.clearExcluded.addEventListener("click", () => {
+      state.excludedMonsters.clear();
+      rerunIfReady();
+    });
+    els.resetFilters.addEventListener("click", () => {
+      els.excludeTarget.checked = true;
+      els.allowSameMonster.checked = true;
+      els.showOnlyComplete.checked = true;
+      els.minLevel.value = "";
+      els.maxLevel.value = "";
+    });
+
+    setMode("level");
+    renderExcludedList();
+    loadFromScript();
+  </script>
+</body>
+</html>
