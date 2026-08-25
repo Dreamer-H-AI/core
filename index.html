@@ -193,6 +193,108 @@
       margin-top: 10px;
     }
 
+    .core-options {
+      display: grid;
+      gap: 7px;
+      max-height: 280px;
+      overflow: auto;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .color-filter {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px;
+      margin: 8px 0 10px;
+    }
+
+    .color-filter button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 7px 8px;
+      border-color: var(--line);
+      background: #fff;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .color-filter button.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .filter-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    .filter-dot.red { background: var(--red); }
+    .filter-dot.blue { background: var(--blue); }
+    .filter-dot.green { background: var(--green); }
+
+    .core-option {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 9px;
+      width: 100%;
+      padding: 9px;
+      border: 1px solid #e1e7ef;
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      text-align: left;
+      font-weight: 500;
+    }
+
+    .core-option:hover {
+      border-color: #b7c3d3;
+      background: #fbfcfe;
+    }
+
+    .core-option.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(38, 54, 74, .12);
+    }
+
+    .core-color {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 24px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .core-color.red { background: var(--red); }
+    .core-color.blue { background: var(--blue); }
+    .core-color.green { background: var(--green); }
+
+    .core-option-title {
+      display: block;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .core-option-detail {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
     .excluded {
       display: flex;
       flex-wrap: wrap;
@@ -409,8 +511,14 @@
         <div id="coreControls" class="hidden">
           <label for="coreSearch">코어 검색</label>
           <input id="coreSearch" placeholder="몬스터명, 효과, 무기 검색" />
-          <label for="targetCore">원하는 코어</label>
-          <select id="targetCore"></select>
+          <div class="color-filter" aria-label="코어 색상 필터">
+            <button class="active" type="button" data-color-filter="all"><span class="filter-dot"></span>전체</button>
+            <button type="button" data-color-filter="red"><span class="filter-dot red"></span>빨강</button>
+            <button type="button" data-color-filter="blue"><span class="filter-dot blue"></span>파랑</button>
+            <button type="button" data-color-filter="green"><span class="filter-dot green"></span>초록</button>
+          </div>
+          <label>원하는 코어</label>
+          <div id="targetCoreList" class="core-options"></div>
         </div>
 
         <h2 style="margin-top: 18px;">필터</h2>
@@ -487,6 +595,8 @@
       excludedMonsters: new Set(),
       targetLevel: null,
       targetCore: null,
+      selectedCoreId: "",
+      coreColorFilter: "all",
     };
 
     const els = {
@@ -498,7 +608,8 @@
       coreControls: document.getElementById("coreControls"),
       targetLevel: document.getElementById("targetLevel"),
       coreSearch: document.getElementById("coreSearch"),
-      targetCore: document.getElementById("targetCore"),
+      colorFilters: Array.from(document.querySelectorAll("[data-color-filter]")),
+      targetCoreList: document.getElementById("targetCoreList"),
       excludeTarget: document.getElementById("excludeTarget"),
       allowSameMonster: document.getElementById("allowSameMonster"),
       showOnlyComplete: document.getElementById("showOnlyComplete"),
@@ -641,24 +752,42 @@
       els.coreControls.classList.toggle("hidden", mode !== "core");
     }
 
-    function coreLabel(core) {
-      const weapon = core.weapon ? ` / ${core.weapon}` : "";
-      return `${core.monster} · ${core.color} · Lv${core.level} · ${core.effectType || "구분 없음"} · ${core.effect || "효과 없음"}${weapon}`;
+    function coreDetail(core) {
+      const weapon = core.weapon ? ` · ${core.weapon}` : "";
+      return `Lv${core.level} · ${core.effectType || "구분 없음"} · ${core.effect || "효과 없음"}${weapon}`;
     }
 
     function renderCoreOptions() {
       const query = els.coreSearch.value.trim().toLowerCase();
       const filtered = state.cores.filter(core => {
         const text = [core.monster, core.color, core.level, core.effectType, core.effect, core.weapon].join(" ").toLowerCase();
-        return !query || text.includes(query);
+        const colorMatched = state.coreColorFilter === "all" || core.colorCode === state.coreColorFilter;
+        return colorMatched && (!query || text.includes(query));
       });
 
-      els.targetCore.innerHTML = "";
+      if (!filtered.some(core => core.id === state.selectedCoreId)) {
+        state.selectedCoreId = filtered[0]?.id || "";
+      }
+
+      els.targetCoreList.innerHTML = "";
+      if (!filtered.length) {
+        els.targetCoreList.innerHTML = `<span class="meta">검색 조건에 맞는 코어가 없습니다.</span>`;
+        return;
+      }
+
       filtered.forEach(core => {
-        const option = document.createElement("option");
-        option.value = core.id;
-        option.textContent = coreLabel(core);
-        els.targetCore.appendChild(option);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `core-option${core.id === state.selectedCoreId ? " active" : ""}`;
+        button.dataset.coreId = core.id;
+        button.innerHTML = `
+          <span class="core-color ${escapeHtml(core.colorCode)}">${escapeHtml(core.color)}</span>
+          <span>
+            <span class="core-option-title">${escapeHtml(core.monster)} 코어</span>
+            <span class="core-option-detail">${escapeHtml(coreDetail(core))}</span>
+          </span>
+        `;
+        els.targetCoreList.appendChild(button);
       });
     }
 
@@ -737,7 +866,7 @@
       let targetCore = null;
       let targetLevel = Number(els.targetLevel.value);
       if (state.mode === "core") {
-        targetCore = state.cores.find(core => core.id === els.targetCore.value) || null;
+        targetCore = state.cores.find(core => core.id === state.selectedCoreId) || null;
         if (!targetCore) {
           clearResults("원하는 코어를 선택하세요.");
           return;
@@ -887,6 +1016,19 @@
     els.modeLevel.addEventListener("click", () => setMode("level"));
     els.modeCore.addEventListener("click", () => setMode("core"));
     els.coreSearch.addEventListener("input", renderCoreOptions);
+    els.colorFilters.forEach(button => {
+      button.addEventListener("click", () => {
+        state.coreColorFilter = button.dataset.colorFilter;
+        els.colorFilters.forEach(item => item.classList.toggle("active", item === button));
+        renderCoreOptions();
+      });
+    });
+    els.targetCoreList.addEventListener("click", event => {
+      const button = event.target.closest("[data-core-id]");
+      if (!button) return;
+      state.selectedCoreId = button.dataset.coreId;
+      renderCoreOptions();
+    });
     els.calculate.addEventListener("click", findCombos);
     els.sortBy.addEventListener("change", () => {
       state.combos = sortCombos(state.combos, state.targetLevel || 0);
