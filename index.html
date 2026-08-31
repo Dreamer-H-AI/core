@@ -502,7 +502,7 @@
     <header>
       <div>
         <h1>코어 합성 계산기</h1>
-        <p class="sub">5층 코어 DB를 읽어서 목표 레벨, 목표 코어, 또는 재료 3레벨 기준의 합성 결과를 찾습니다.</p>
+        <p class="sub">5층 코어 DB를 읽어서 목표 레벨, 목표 코어, 또는 재료 3레벨 기준의 합성 결과를 찾습니다. 세 종류가 같지 않으면 합성되므로, 같은 코어 2개 + 다른 코어 1개도 포함합니다.</p>
       </div>
       <div class="creator">제작자 : DuckbaeK</div>
     </header>
@@ -1054,12 +1054,23 @@
       const pool = availableMonsters(targetCore);
       const combos = [];
 
-      for (let i = 0; i < pool.length - 2; i++) {
-        for (let j = i + 1; j < pool.length - 1; j++) {
+      function pushIfMatch(a, b, c) {
+        const avg = (a.level + b.level + c.level) / 3;
+        if (nearestLevels(avg, dbLevels).includes(targetLevel)) combos.push([a, b, c]);
+      }
+
+      for (let i = 0; i < pool.length; i++) {
+        for (let j = i + 1; j < pool.length; j++) {
           for (let k = j + 1; k < pool.length; k++) {
-            const avg = (pool[i].level + pool[j].level + pool[k].level) / 3;
-            if (nearestLevels(avg, dbLevels).includes(targetLevel)) combos.push([pool[i], pool[j], pool[k]]);
+            pushIfMatch(pool[i], pool[j], pool[k]);
           }
+        }
+      }
+
+      for (let i = 0; i < pool.length; i++) {
+        for (let j = 0; j < pool.length; j++) {
+          if (i === j) continue;
+          pushIfMatch(pool[i], pool[i], pool[j]);
         }
       }
 
