@@ -170,9 +170,27 @@
 
     .mode {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 8px;
       margin-bottom: 10px;
+    }
+
+    .mode button {
+      font-size: 12px;
+      padding: 8px 6px;
+    }
+
+    .direct-levels {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .direct-levels input {
+      text-align: center;
+      font-size: 20px;
+      font-weight: 800;
+      padding: 12px 8px;
     }
 
     .mode button {
@@ -341,7 +359,7 @@
 
     .stats {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 12px;
     }
@@ -484,7 +502,7 @@
     <header>
       <div>
         <h1>코어 합성 계산기</h1>
-        <p class="sub">5층 코어 DB를 읽어서 목표 레벨 또는 목표 코어 기준의 3개 재료 조합을 찾습니다.</p>
+        <p class="sub">5층 코어 DB를 읽어서 목표 레벨, 목표 코어, 또는 재료 3레벨 기준의 합성 결과를 찾습니다.</p>
       </div>
       <div class="creator">제작자 : DuckbaeK</div>
     </header>
@@ -499,8 +517,28 @@
 
         <h2 style="margin-top: 18px;">계산 방식</h2>
         <div class="mode">
-          <button id="modeLevel" class="active" type="button">레벨만 입력</button>
-          <button id="modeCore" type="button">원하는 코어 선택</button>
+          <button id="modeDirect" type="button">3레벨 입력</button>
+          <button id="modeLevel" class="active" type="button">목표 레벨</button>
+          <button id="modeCore" type="button">원하는 코어</button>
+        </div>
+
+        <div id="directControls" class="hidden">
+          <label for="directPaste">한 번에 붙여넣기</label>
+          <input id="directPaste" placeholder="예: 108 110 112" autocomplete="off" />
+          <div class="direct-levels" style="margin-top: 10px;">
+            <div>
+              <label for="directA">재료 1</label>
+              <input id="directA" type="number" min="1" max="200" inputmode="numeric" autocomplete="off" />
+            </div>
+            <div>
+              <label for="directB">재료 2</label>
+              <input id="directB" type="number" min="1" max="200" inputmode="numeric" autocomplete="off" />
+            </div>
+            <div>
+              <label for="directC">재료 3</label>
+              <input id="directC" type="number" min="1" max="200" inputmode="numeric" autocomplete="off" />
+            </div>
+          </div>
         </div>
 
         <div id="levelControls">
@@ -552,7 +590,8 @@
         <div class="stats">
           <div class="stat"><b id="coreCount">0</b><span>불러온 코어</span></div>
           <div class="stat"><b id="comboCount">0</b><span>가능 조합</span></div>
-          <div class="stat"><b id="resultLevel">-</b><span>결과 레벨</span></div>
+          <div class="stat"><b id="avgLevel">-</b><span>평균 레벨</span></div>
+          <div class="stat"><b id="resultLevel">-</b><span>DB 결과</span></div>
           <div class="stat"><b id="chance">-</b><span>목표 코어 확률</span></div>
         </div>
 
@@ -572,7 +611,7 @@
           <div id="results" class="table-wrap hidden">
             <table>
               <thead>
-                <tr>
+                <tr id="resultHead">
                   <th>재료 몬스터 1</th>
                   <th>재료 몬스터 2</th>
                   <th>재료 몬스터 3</th>
@@ -592,20 +631,29 @@
       mode: "level",
       cores: [],
       combos: [],
+      directCores: [],
       excludedMonsters: new Set(),
       targetLevel: null,
       targetCore: null,
       selectedCoreId: "",
       coreColorFilter: "all",
+      average: null,
+      nearestLevels: [],
     };
 
     const els = {
       loadScript: document.getElementById("loadScript"),
       loadStatus: document.getElementById("loadStatus"),
+      modeDirect: document.getElementById("modeDirect"),
       modeLevel: document.getElementById("modeLevel"),
       modeCore: document.getElementById("modeCore"),
+      directControls: document.getElementById("directControls"),
       levelControls: document.getElementById("levelControls"),
       coreControls: document.getElementById("coreControls"),
+      directPaste: document.getElementById("directPaste"),
+      directA: document.getElementById("directA"),
+      directB: document.getElementById("directB"),
+      directC: document.getElementById("directC"),
       targetLevel: document.getElementById("targetLevel"),
       coreSearch: document.getElementById("coreSearch"),
       colorFilters: Array.from(document.querySelectorAll("[data-color-filter]")),
@@ -623,10 +671,12 @@
       resultSearch: document.getElementById("resultSearch"),
       coreCount: document.getElementById("coreCount"),
       comboCount: document.getElementById("comboCount"),
+      avgLevel: document.getElementById("avgLevel"),
       resultLevel: document.getElementById("resultLevel"),
       chance: document.getElementById("chance"),
       empty: document.getElementById("empty"),
       results: document.getElementById("results"),
+      resultHead: document.getElementById("resultHead"),
       resultBody: document.getElementById("resultBody"),
     };
 
@@ -744,12 +794,45 @@
       els.loadStatus.classList.toggle("warn", warn);
     }
 
+    function uniqueDbLevels() {
+      return Array.from(new Set(state.cores.map(core => core.level).filter(level => Number.isFinite(level)))).sort((a, b) => a - b);
+    }
+
+    function nearestLevels(avg, levels) {
+      if (!levels.length || !Number.isFinite(avg)) return [];
+      const EPS = 1e-9;
+      let best = Infinity;
+      let found = [];
+      levels.forEach(level => {
+        const distance = Math.abs(avg - level);
+        if (distance < best - EPS) {
+          best = distance;
+          found = [level];
+        } else if (Math.abs(distance - best) <= EPS) {
+          found.push(level);
+        }
+      });
+      return found.sort((a, b) => a - b);
+    }
+
+    function formatResultLevels(levels) {
+      if (!levels.length) return "";
+      return levels.map(level => `Lv${level}`).join(" 또는 ");
+    }
+
+    function parseDirectLevels(text) {
+      return (String(text || "").match(/\d+/g) || []).map(Number).filter(n => Number.isFinite(n) && n > 0).slice(0, 3);
+    }
+
     function setMode(mode) {
       state.mode = mode;
+      els.modeDirect.classList.toggle("active", mode === "direct");
       els.modeLevel.classList.toggle("active", mode === "level");
       els.modeCore.classList.toggle("active", mode === "core");
+      els.directControls.classList.toggle("hidden", mode !== "direct");
       els.levelControls.classList.toggle("hidden", mode !== "level");
       els.coreControls.classList.toggle("hidden", mode !== "core");
+      els.calculate.textContent = mode === "direct" ? "결과 보기" : "조합 찾기";
     }
 
     function coreDetail(core) {
@@ -801,7 +884,9 @@
 
     function clearResults(message) {
       state.combos = [];
+      state.directCores = [];
       els.comboCount.textContent = "0";
+      els.avgLevel.textContent = state.average != null ? Number(state.average).toFixed(2) : "-";
       els.resultLevel.textContent = "-";
       els.chance.textContent = "-";
       els.resultBody.innerHTML = "";
@@ -857,8 +942,82 @@
       return Array.from(seen.values());
     }
 
+    function runCalculate() {
+      if (state.mode === "direct") findDirect();
+      else findCombos();
+    }
+
+    function findDirect() {
+      if (!state.cores.length) {
+        state.average = null;
+        clearResults("먼저 DB를 불러오세요.");
+        return;
+      }
+
+      const values = [els.directA.value, els.directB.value, els.directC.value].map(Number);
+      if (!values.every(n => Number.isFinite(n) && n > 0)) {
+        state.average = null;
+        clearResults("재료 레벨 3개를 입력하세요.");
+        return;
+      }
+
+      const avg = (values[0] + values[1] + values[2]) / 3;
+      const nearest = nearestLevels(avg, uniqueDbLevels());
+      const cores = availableCores(null).filter(core => nearest.includes(core.level));
+      state.average = avg;
+      state.targetLevel = nearest.length === 1 ? nearest[0] : null;
+      state.targetCore = null;
+      state.nearestLevels = nearest;
+      state.combos = [];
+      state.directCores = cores;
+      els.avgLevel.textContent = avg.toFixed(2);
+      els.chance.textContent = "-";
+      els.chance.title = "";
+
+      if (!nearest.length || !cores.length) {
+        els.comboCount.textContent = "0";
+        els.resultLevel.textContent = "없음";
+        els.empty.textContent = `평균 ${avg.toFixed(2)} · DB 내 결과가 없습니다.`;
+        els.empty.classList.remove("hidden");
+        els.results.classList.add("hidden");
+        els.resultBody.innerHTML = "";
+        return;
+      }
+
+      els.comboCount.textContent = cores.length.toLocaleString();
+      els.resultLevel.textContent = formatResultLevels(nearest) + (nearest.length > 1 ? " (둘 중 하나)" : "");
+      renderDirectResults();
+    }
+
+    function renderDirectResults() {
+      const query = els.resultSearch.value.trim().toLowerCase();
+      const filtered = state.directCores.filter(core => {
+        if (!query) return true;
+        return [core.monster, core.floor, core.color, core.level, core.effectType, core.effect, core.weapon].join(" ").toLowerCase().includes(query);
+      });
+      els.resultHead.innerHTML = "<th>몬스터</th><th>색상</th><th>레벨</th><th>효과</th>";
+      els.resultBody.innerHTML = "";
+      if (!filtered.length) {
+        els.empty.textContent = "검색 조건에 맞는 코어가 없습니다.";
+        els.empty.classList.remove("hidden");
+        els.results.classList.add("hidden");
+        return;
+      }
+      els.resultBody.innerHTML = filtered.map(core => `
+        <tr>
+          <td><strong>${escapeHtml(core.monster)}</strong><div class="meta">${escapeHtml(core.floor)}</div></td>
+          <td><span class="pill ${escapeHtml(core.colorCode)}">${escapeHtml(core.color)}</span></td>
+          <td>Lv${core.level}</td>
+          <td>${escapeHtml(core.effectType || "구분 없음")} · ${escapeHtml(core.effect || "효과 없음")}${core.weapon ? " · " + escapeHtml(core.weapon) : ""}</td>
+        </tr>
+      `).join("");
+      els.empty.classList.add("hidden");
+      els.results.classList.remove("hidden");
+    }
+
     function findCombos() {
       if (!state.cores.length) {
+        state.average = null;
         clearResults("먼저 DB를 불러오세요.");
         return;
       }
@@ -868,6 +1027,7 @@
       if (state.mode === "core") {
         targetCore = state.cores.find(core => core.id === state.selectedCoreId) || null;
         if (!targetCore) {
+          state.average = null;
           clearResults("원하는 코어를 선택하세요.");
           return;
         }
@@ -875,7 +1035,19 @@
       }
 
       if (!Number.isFinite(targetLevel) || targetLevel <= 0) {
+        state.average = null;
         clearResults("원하는 레벨을 입력하세요.");
+        return;
+      }
+
+      const dbLevels = uniqueDbLevels();
+      if (!dbLevels.includes(targetLevel)) {
+        state.average = null;
+        state.targetLevel = targetLevel;
+        state.targetCore = targetCore;
+        state.nearestLevels = [];
+        clearResults("DB 내 결과가 없습니다.");
+        els.resultLevel.textContent = "없음";
         return;
       }
 
@@ -886,13 +1058,16 @@
         for (let j = i + 1; j < pool.length - 1; j++) {
           for (let k = j + 1; k < pool.length; k++) {
             const avg = (pool[i].level + pool[j].level + pool[k].level) / 3;
-            if (Math.round(avg) === targetLevel) combos.push([pool[i], pool[j], pool[k]]);
+            if (nearestLevels(avg, dbLevels).includes(targetLevel)) combos.push([pool[i], pool[j], pool[k]]);
           }
         }
       }
 
+      state.average = null;
       state.targetLevel = targetLevel;
       state.targetCore = targetCore;
+      state.nearestLevels = [targetLevel];
+      state.directCores = [];
       state.combos = sortCombos(combos, targetLevel);
       renderSummary();
       renderResults();
@@ -913,6 +1088,7 @@
 
     function renderSummary() {
       els.comboCount.textContent = state.combos.length.toLocaleString();
+      els.avgLevel.textContent = "-";
       els.resultLevel.textContent = state.targetLevel ? `Lv${state.targetLevel}` : "-";
       if (state.targetCore) {
         const colorPool = state.cores.filter(core => core.level === state.targetLevel && core.color === state.targetCore.color);
@@ -961,10 +1137,19 @@
 
     function rerunIfReady() {
       renderExcludedList();
+      if (state.mode === "direct") {
+        if (els.directA.value && els.directB.value && els.directC.value) findDirect();
+        return;
+      }
       if (state.targetLevel) findCombos();
     }
 
     function renderResults() {
+      if (state.mode === "direct") {
+        renderDirectResults();
+        return;
+      }
+      els.resultHead.innerHTML = "<th>재료 몬스터 1</th><th>재료 몬스터 2</th><th>재료 몬스터 3</th><th>평균 레벨</th>";
       const query = els.resultSearch.value.trim().toLowerCase();
       const filtered = state.combos.filter(combo => {
         if (!query) return true;
@@ -979,14 +1164,16 @@
         return;
       }
 
+      const dbLevels = uniqueDbLevels();
       const rows = filtered.slice(0, 1000).map(combo => {
         const avg = sumLevels(combo) / 3;
+        const nearest = nearestLevels(avg, dbLevels);
         return `
           <tr>
             <td>${renderMaterial(combo[0])}</td>
             <td>${renderMaterial(combo[1])}</td>
             <td>${renderMaterial(combo[2])}</td>
-            <td>Lv${avg.toFixed(2)} → Lv${Math.round(avg)}</td>
+            <td>Lv${avg.toFixed(2)} → ${formatResultLevels(nearest) || "없음"}</td>
           </tr>
         `;
       }).join("");
@@ -1013,6 +1200,7 @@
     }
 
     els.loadScript.addEventListener("click", loadFromScript);
+    els.modeDirect.addEventListener("click", () => setMode("direct"));
     els.modeLevel.addEventListener("click", () => setMode("level"));
     els.modeCore.addEventListener("click", () => setMode("core"));
     els.coreSearch.addEventListener("input", renderCoreOptions);
@@ -1029,8 +1217,12 @@
       state.selectedCoreId = button.dataset.coreId;
       renderCoreOptions();
     });
-    els.calculate.addEventListener("click", findCombos);
+    els.calculate.addEventListener("click", runCalculate);
     els.sortBy.addEventListener("change", () => {
+      if (state.mode === "direct") {
+        renderDirectResults();
+        return;
+      }
       state.combos = sortCombos(state.combos, state.targetLevel || 0);
       renderResults();
     });
@@ -1040,7 +1232,7 @@
       if (!button) return;
       state.excludedMonsters.add(button.dataset.materialId);
       renderExcludedList();
-      findCombos();
+      runCalculate();
     });
     els.excludedList.addEventListener("click", event => {
       const button = event.target.closest("[data-excluded-id]");
@@ -1058,6 +1250,58 @@
       els.showOnlyComplete.checked = true;
       els.minLevel.value = "";
       els.maxLevel.value = "";
+    });
+
+    function fillDirectLevels(values) {
+      const ids = ["directA", "directB", "directC"];
+      ids.forEach((id, i) => {
+        els[id].value = values[i] != null ? String(values[i]) : els[id].value;
+      });
+    }
+
+    els.directPaste.addEventListener("input", () => {
+      const parsed = parseDirectLevels(els.directPaste.value);
+      if (parsed.length >= 3) {
+        fillDirectLevels(parsed);
+        els.directPaste.value = parsed.join(" ");
+        findDirect();
+      }
+    });
+    ["directA", "directB", "directC"].forEach((id, index) => {
+      const input = els[id];
+      input.addEventListener("focus", () => input.select());
+      input.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " " || event.key === ",") {
+          event.preventDefault();
+          if (index < 2) {
+            els[["directA", "directB", "directC"][index + 1]].focus();
+            els[["directA", "directB", "directC"][index + 1]].select();
+          } else {
+            findDirect();
+          }
+        }
+      });
+      input.addEventListener("paste", event => {
+        const text = event.clipboardData && event.clipboardData.getData("text");
+        const parsed = parseDirectLevels(text || "");
+        if (parsed.length >= 2) {
+          event.preventDefault();
+          const next = [Number(els.directA.value), Number(els.directB.value), Number(els.directC.value)];
+          const start = parsed.length >= 3 ? 0 : index;
+          parsed.forEach((level, i) => {
+            if (start + i < 3) next[start + i] = level;
+          });
+          fillDirectLevels(next);
+          if (next.every(n => Number.isFinite(n) && n > 0)) findDirect();
+        }
+      });
+      input.addEventListener("input", () => {
+        if (/^\d{3}$/.test(String(input.value).trim()) && index < 2) {
+          els[["directA", "directB", "directC"][index + 1]].focus();
+          els[["directA", "directB", "directC"][index + 1]].select();
+        }
+        if ([els.directA.value, els.directB.value, els.directC.value].every(v => v !== "")) findDirect();
+      });
     });
 
     setMode("level");
