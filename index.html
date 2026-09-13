@@ -787,7 +787,8 @@
       return match ? match[1] : String(url).trim();
     }
 
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyyDkwxQOhDAYBD4vhxJfpWvrS9Bi3sZNWiiIfXpCdu4wMC28zV6t8YfiG6u-hSrerXg/exec";
+    const SHEET_ID = "13KJaHB2UXlGA9xxC6mCt8vuTlLPfCDyFwKiKXkwh_rw";
+    const SHEET_GID = "0";
 
     function setStatus(message, warn = false) {
       els.loadStatus.textContent = message;
@@ -895,19 +896,62 @@
       els.results.classList.add("hidden");
     }
 
+    function objectsFromGviz(payload) {
+      const table = payload && payload.table;
+      if (!table || !Array.isArray(table.cols) || !Array.isArray(table.rows)) {
+        throw new Error("시트 형식이 올바르지 않습니다.");
+      }
+      const headers = table.cols.map(col => normalizeHeader(col.label || col.id));
+      return table.rows.map(row => {
+        const item = {};
+        headers.forEach((header, index) => {
+          const cell = row.c && row.c[index];
+          const value = cell && cell.f != null ? cell.f : cell && cell.v != null ? cell.v : "";
+          item[header] = String(value);
+        });
+        return item;
+      });
+    }
+
+    function loadSheetTable() {
+      return new Promise((resolve, reject) => {
+        const callback = `coreSheet_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const script = document.createElement("script");
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("시간 초과"));
+        }, 15000);
+        function cleanup() {
+          clearTimeout(timer);
+          delete window[callback];
+          script.remove();
+        }
+        window[callback] = payload => {
+          cleanup();
+          if (!payload || payload.status !== "ok") {
+            reject(new Error("시트 응답이 올바르지 않습니다."));
+            return;
+          }
+          resolve(payload);
+        };
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("시트를 읽지 못했습니다."));
+        };
+        script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${callback}&gid=${SHEET_GID}&headers=1&_=${Date.now()}`;
+        document.head.appendChild(script);
+      });
+    }
+
     async function loadFromScript() {
-      const url = SCRIPT_URL;
-      setStatus("연동 URL에서 DB를 불러오는 중입니다.");
+      setStatus("시트에서 DB를 불러오는 중입니다.");
       try {
-        const response = await fetch(url, { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (!data.ok || !Array.isArray(data.rows)) throw new Error("응답 형식이 올바르지 않습니다.");
-        const cores = buildCoresFromObjects(data.rows);
+        const payload = await loadSheetTable();
+        const cores = buildCoresFromObjects(objectsFromGviz(payload));
         if (!cores.length) throw new Error("코어 데이터가 비어 있습니다.");
-        applyDb(cores, "연동 URL");
+        applyDb(cores, "코어 DB");
       } catch (error) {
-        setStatus("연동 URL에서 DB를 불러오지 못했습니다. Apps Script 배포 권한과 URL을 확인하세요.", true);
+        setStatus("시트가 비공개라 DB를 못 읽습니다. 공유에서 '링크가 있는 모든 사용자 · 뷰어'로 바꿔 주세요.", true);
       }
     }
 
